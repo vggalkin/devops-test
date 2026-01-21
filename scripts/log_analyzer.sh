@@ -1,23 +1,29 @@
-awk '
-{
-    total++
-    ip[$1]++
-    if ($NF == 200) status200++
-}
+#!/bin/bash
+
+LOG_FILE="/home/vladimir/devops-test/logs/access.log"
+
+# Параметры подключения к PostgreSQL
+DB_HOST="localhost"
+DB_PORT="5432"
+DB_NAME="devops_test"
+DB_USER="postgres"
+
+# Проверка наличия файла
+if [[ ! -f "$LOG_FILE" ]]; then
+    echo "Файл логов не найден: $LOG_FILE" >&2
+    exit 1
+fi
+
+# Анализ логов и запись в БД
+awk '{ ip[$1]++ }
 END {
-    print "Общее количество HTTP-запросов:", total
-    print "Количество ответов с кодом 200:", status200
-    print "ТОП-3 IP-адреса по количеству запросов:"
     for (i in ip) {
-        printf "%d %s\n", ip[i], i
+        printf "%s %d\n", i, ip[i]
     }
-}' |
-{
-    read line1
-    read line2
-    read line3
-    echo "$line1"
-    echo "$line2"
-    echo "$line3"
-    sort -nr | head -3
-}
+}' "$LOG_FILE" |
+while read ip count; do
+    psql \
+        -U "$DB_USER" \
+        -d "$DB_NAME" \
+        -c "INSERT INTO log_stats (ip, requests_count) VALUES ('$ip', $count);"
+done
